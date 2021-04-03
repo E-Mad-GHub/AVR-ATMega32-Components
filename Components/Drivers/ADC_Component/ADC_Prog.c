@@ -24,9 +24,13 @@ static void (*PtrToFunction)(void) ;
 
 static u8 ch_index = 0 ;
 
-static CHANNELS * Container = NULL ;
+static u8 GlGroup ;
 
-static u8 ContainerElements = 0 ;
+static u8 Read = 1 ;
+
+static u8 Write = 0 ;
+
+static u16 Vals[2][8] ;
 
 /************************************************/
 
@@ -35,19 +39,29 @@ static u8 ContainerElements = 0 ;
 
 /*************** Static Functions ***************/
 
-static void StartConv(void) ;
-
-static u8 SetContainer( CHANNELS * Copy_u8ReturnAddress , u8 Copy_u8NumOfElements) ;
+static void RefStartConv(void) ;
 
 static void Update(u8 ElementIndex , u16 Value) ;
+
+static void Swap(void) ;
+
+static void StartConv(void) ;
+
+static void HWSet(void);
+
+static void HWReset(void);
 
 /************************************************/
 
 
+/* Junk */
+static void nthng(void) ;
+
 
 
 /*************************************************************************************************/
-/* Description: Enables the GIE from SREG register	 								             */
+/* Description: Initialization of ADC includes initializing static variables and defining the    */
+/*				configurations found in the "config.h" file 							         */
 /*																				            	 */
 /* Inputs : void														 			             */
 /* 																								 */
@@ -86,7 +100,15 @@ void ADC_vInit( void ) {
 
 	/* CHANNEL CHOICE	 				*/
 	((Register*) LOCAL_ADMUX ) -> ByteAccess  &= (LOCAL_CHANNEL_MASK)  ;
-	((Register*) LOCAL_ADMUX ) -> ByteAccess  |= (ADC_CHANNEL) ;
+	((Register*) LOCAL_ADMUX ) -> ByteAccess  |= (ADC_DEF_CHANNEL) ;
+
+	/* Trigger Type 					*/
+	((Register*) LOCAL_ADCSRA ) -> ByteAccess  &= (LOCAL_TRIGG_TYPE_MASK) ;
+	((Register*) LOCAL_ADCSRA ) -> ByteAccess  |= (DEF_CHANNEL_TRIGGER)   ;
+
+
+	/* HW Trigger Type		 			*/
+	((Register*) LOCAL_SFIOR  ) -> ByteAccess  |= (HW_TRIGGER_CONFIG)     ;
 
 
 
@@ -96,6 +118,60 @@ void ADC_vInit( void ) {
 /*************************************************************************************************/
 
 
+
+
+
+/*************************************************************************************************/
+/* Description: Starts Conversion of ADC channel set before		 					             */
+/*																				            	 */
+/* Inputs : void 																		         */
+/* Outputs: u8Error 						-> Error State							             */
+/*																					             */
+
+void ADC_vStartConverting( void ) {
+
+
+	if ((HW_TRIGGER_CONFIG == HW_TRIG_FREE_RUN) ){   //grps[GlGroup].TriggerType == TRIGG_TYPE_SW ||
+		/* Start			 				*/
+		((Register*) LOCAL_ADCSRA ) -> ByteAccess  |= (LOCAL_START) ;
+	}
+
+}
+
+/*																								 */
+/*************************************************************************************************/
+
+
+
+
+
+/*************************************************************************************************/
+/* Description: Fill Array with the values converted from ADC						             */
+/*																				            	 */
+/* Inputs : Copy_u16ValuePtr 				-> Pointer to Array							         */
+/* 			Copy_u8Length 					-> Array Length										 */
+/* Outputs: u8Error 						-> Error State							             */
+/*																					             */
+
+u8 ADC_vGetADC( u16 * Copy_u16ValuePtr , u8 Copy_u8Length){
+
+	u8 Local_u8ErrorState = ERROR_OK ;
+
+	if (Copy_u8Length < 8){
+		for (u8 count = 0 ; count < Copy_u8Length ; count ++){
+			Copy_u16ValuePtr[count] = Vals[Read][count] ;
+		}
+	}
+	else {
+		Local_u8ErrorState = ERROR_NOK ;
+	}
+
+
+	return Local_u8ErrorState ;
+}
+
+/*																					             */
+/*************************************************************************************************/
 
 
 
@@ -116,6 +192,9 @@ u8 ADC_u8SetCallBack( void (*Copy_PvoidFuncCallBack)(void) ) {
 	if(Copy_PvoidFuncCallBack != NULL){
 		PtrToFunction = Copy_PvoidFuncCallBack ;
 	}
+	else {
+		Local_u8ErrorState = ERROR_NOK ;
+	}
 
 	return Local_u8ErrorState ;
 }
@@ -127,18 +206,16 @@ u8 ADC_u8SetCallBack( void (*Copy_PvoidFuncCallBack)(void) ) {
 
 
 
-
-
-
 /*************************************************************************************************/
-/* Description: Disables the GIE from SREG register	 								             */
+/* Description: Work the ADC with Blocking Mode	(SW Triggered) 						             */
 /*																				            	 */
-/* Inputs : void														 			             */
-/* 																								 */
+/* Inputs : Copy_ReturnValue 		-> Value of Conversion										 */
+/* 			Copy_ChosenChannel		-> Channel to work on	 									 */
+/*																								 */
 /* Outputs: void																	             */
 /*																					             */
 
-void ADC_GetBlocking( u16 * Copy_ReturnValue , u8 Copy_ChosenChannel ) {
+void ADC_SWGetBlocking( u16 * Copy_ReturnValue , u8 Copy_ChosenChannel ) {
 
 	u8 flag = 0 ;
 
@@ -151,8 +228,11 @@ void ADC_GetBlocking( u16 * Copy_ReturnValue , u8 Copy_ChosenChannel ) {
 	((Register*) LOCAL_ADMUX )  -> ByteAccess  |= (Copy_ChosenChannel)  ;
 
 
+
 	/* Start			 				*/
 	((Register*) LOCAL_ADCSRA ) -> ByteAccess  |= (LOCAL_START) ;
+
+
 
 	/* Pulling Wait		 				*/
 	while(!flag){
@@ -175,27 +255,109 @@ void ADC_GetBlocking( u16 * Copy_ReturnValue , u8 Copy_ChosenChannel ) {
 
 
 
+/*************************************************************************************************/
+/* Description: Work the ADC with Blocking Mode	(HW Triggered) 						             */
+/*																				            	 */
+/* Inputs : Copy_ReturnValue 		-> Value of Conversion										 */
+/* 			Copy_ChosenChannel		-> Channel to work on	 									 */
+/*																								 */
+/* Outputs: void																	             */
+/*																					             */
+
+void ADC_HWGetBlocking( u16 * Copy_ReturnValue , u8 Copy_ChosenChannel ) {
+
+	u8 flag = 0 ;
+
+
+	/* Interrupt Disable	 			*/
+	((Register*) LOCAL_ADCSRA ) -> ByteAccess  &= (LOCAL_INTR_MASK)    ;
+
+	/* CHANNEL CHOICE	 				*/
+	((Register*) LOCAL_ADMUX )  -> ByteAccess  &= (LOCAL_CHANNEL_MASK)  ;
+	((Register*) LOCAL_ADMUX )  -> ByteAccess  |= (Copy_ChosenChannel)  ;
+
+
+
+	/* Pulling Wait		 				*/
+	while(!flag){
+
+		flag = ( ((Register*) LOCAL_ADCSRA ) -> ByteAccess )&(LOCAL_CONV_FLAG) ;
+
+	}
+
+	*Copy_ReturnValue = ((Register_16*) LOCAL_ADCL ) -> DualAccess ;
+
+
+
+
+}
+
+/*																					             */
+/*************************************************************************************************/
+
+
+
+
 
 /*************************************************************************************************/
-/* Description: ADC Refresh API														             */
+/* Description: Selects ADC Channel 												             */
 /*																				            	 */
-/* Inputs : Copy_u8IntrIndex 				-> No of Interrupt							         */
-/* 			(*Copy_PvoidFuncCallBack)(void) -> the address of the function to be used			 */
+/* Inputs : Copy_u8Channel 					-> Selected Channel, EX. ADC_CH0		             */
 /* Outputs: u8Error 						-> Error State							             */
 /*																					             */
 
-u8 ADC_u8Refresh( CHANNELS * Copy_u8ReturnAddress , u8 Copy_u8NumOfElements){
+void ADC_vSetChannel( u8 Copy_u8Channel ){
 
-	u8 Local_u8ErrorState = ERROR_OK ;
+	/* CHANNEL CHOICE	 				*/
+	((Register*) LOCAL_ADMUX )  -> ByteAccess  &= (LOCAL_CHANNEL_MASK)  ;
+	((Register*) LOCAL_ADMUX )  -> ByteAccess  |= (Copy_u8Channel)  ;
 
-	Local_u8ErrorState = SetContainer( Copy_u8ReturnAddress , Copy_u8NumOfElements) ;
+}
 
-	for(u8 count = 0 ; count < Copy_u8NumOfElements ; count ++){
-		Container[count].FinFlag = 0 ;
-		Container[count].Value   = 0 ;
-	}
+/*																					             */
+/*************************************************************************************************/
+
+
+
+
+/*************************************************************************************************/
+/* Description: Free Running Mode in ADC, just waits on conv. flag and writes the value of 		 */
+/* 				ADC conversion in the argument										             */
+/*																				            	 */
+/* Inputs : *Copy_u16Value 					-> Return value of ADC after Conv.		             */
+/* Outputs: u8Error 						-> Error State							             */
+/*																					             */
+
+void ADC_vFreeRun( u16 * Copy_u16Value ){
+
+	/* Pulling Wait		 				*/
+   	while(!(( ((Register*) LOCAL_ADCSRA ) -> ByteAccess )&(LOCAL_CONV_FLAG))){
+
+   	}
+
+   	*Copy_u16Value = ((Register_16*) LOCAL_ADCL ) -> DualAccess ;
+
+}
+
+/*																					             */
+/*************************************************************************************************/
+
+
+
+/*************************************************************************************************/
+/* Description: ADC Refresh Group API												             */
+/*																				            	 */
+/* Inputs : Copy_u8GroupIndex 				-> Group Index .. Ex. 0 , 1 , 2 , 3 ... etc          */
+/* Outputs: u8Error 						-> Error State							             */
+/*																					             */
+
+void ADC_u8Refresh( u8 Copy_u8GroupIndex ){
 
 	ch_index = 0 ;
+
+	GlGroup = Copy_u8GroupIndex ;
+
+	HWSet();
 
 
 	/* Interrupt Enable	 				*/
@@ -204,10 +366,7 @@ u8 ADC_u8Refresh( CHANNELS * Copy_u8ReturnAddress , u8 Copy_u8NumOfElements){
 
 
 	/* Start Conversion Function		*/
-	StartConv() ;
-
-
-	return Local_u8ErrorState ;
+	RefStartConv() ;
 
 }
 
@@ -230,31 +389,14 @@ void __vector_16 (void) __attribute__ ((signal)) ;
 void __vector_16 (void) {									// ADC Conversion Done
 
 
-	Update(ch_index , ((Register_16*) LOCAL_ADCL ) -> DualAccess) ;
 
+
+	Update(ch_index , ((Register_16*) LOCAL_ADCL ) -> DualAccess) ;
 
 	ch_index ++ ;
 
+	RefStartConv() ;
 
-
-
-	if (ch_index == CHANNEL_NB){
-
-		/* Interrupt Disable	 				*/
-		((Register*) LOCAL_ADCSRA ) -> ByteAccess  &= (LOCAL_INTR_MASK)    ;
-
-
-
-		if(PtrToFunction != NULL){
-			PtrToFunction();
-		}
-
-	}
-	else if (ch_index < CHANNEL_NB){
-
-		StartConv() ;
-
-	}
 
 
 
@@ -267,24 +409,36 @@ void __vector_16 (void) {									// ADC Conversion Done
 
 
 
+/*************************************************************************************************/
+/* Description: Conversion Initiation Function		 								             */
+
+static void RefStartConv(void){
 
 
 
+	switch (ch_index){
+
+	case CHANNEL_NB:
+
+		Swap() ;
+		HWReset();
+		PtrToFunction();
+
+		break ;
+
+	default:
+
+		StartConv();
+		nthng() ;			// i really couldn't see why this should be here so it can continue converting, i tried everything to eliminate it but i wasn't lucky :/
+
+	}
 
 
 
+}
 
-
-
-
-
-
-
-
-
-
-
-
+/*																					             */
+/*************************************************************************************************/
 
 
 
@@ -295,20 +449,52 @@ void __vector_16 (void) {									// ADC Conversion Done
 
 static void StartConv(void){
 
+	if (grps[GlGroup].TriggerType == TRIGG_TYPE_SW) {
 
-	/* CHANNEL CHOICE	 				*/
-	((Register*) LOCAL_ADMUX ) -> ByteAccess  &= (LOCAL_CHANNEL_MASK)  ;
-	((Register*) LOCAL_ADMUX ) -> ByteAccess  |= (Ch_Chosen[ch_index]) ;
+		/* CHANNEL CHOICE	 				*/
+		((Register*) LOCAL_ADMUX ) -> ByteAccess  &= (LOCAL_CHANNEL_MASK)  ;
+		((Register*) LOCAL_ADMUX ) -> ByteAccess  |= (grps[GlGroup].ArrOfChnls[ch_index]) ;
 
+		/* Start			 				*/
+		((Register*) LOCAL_ADCSRA) -> ByteAccess  |= (LOCAL_START) ;
 
-	/* Start			 				*/
-	((Register*) LOCAL_ADCSRA) -> ByteAccess  |= (LOCAL_START) ;
+	}
+	else {
 
+		/* CHANNEL CHOICE	 				*/
+		((Register*) LOCAL_ADMUX ) -> ByteAccess  &= (LOCAL_CHANNEL_MASK)  ;
+		((Register*) LOCAL_ADMUX ) -> ByteAccess  |= (grps[GlGroup].ArrOfChnls[ch_index]) ;
+
+		/* Pulling Wait		 				*/
+		while(!( ( ((Register*) LOCAL_ADCSRA ) -> ByteAccess )&(LOCAL_CONV_FLAG) )){
+
+		}
+	}
 
 }
 
 /*																					             */
 /*************************************************************************************************/
+
+
+
+
+/*************************************************************************************************/
+/* Description: Array Swaping Function				 								             */
+
+static void Swap(void){
+
+	u8 tmp ;
+
+	tmp   = Read ;
+	Read  = Write;
+	Write = tmp  ;
+
+}
+
+/*																					             */
+/*************************************************************************************************/
+
 
 
 
@@ -318,10 +504,9 @@ static void StartConv(void){
 static void Update(u8 ElementIndex , u16 Value){
 
 
-	if ( (ElementIndex <= ContainerElements) ){
+	if ( (ElementIndex < grps[GlGroup].CH_Nb) ){
 
-		Container[ElementIndex].Value   = Value ;
-		Container[ElementIndex].FinFlag = 1     ;
+		Vals[Write][ElementIndex]   = Value ;
 
 	}
 
@@ -333,27 +518,58 @@ static void Update(u8 ElementIndex , u16 Value){
 
 
 
+
 /*************************************************************************************************/
-/* Description: Setting The Container Address		 								             */
+/* Description: Set the Trigger Type 				 								             */
 
-static u8 SetContainer( CHANNELS * Copy_u8ReturnAddress , u8 Copy_u8NumOfElements){
+static void HWSet(void){
 
-	u8 Local_u8ErrorState = ERROR_OK ;
-
-
-	if ( (Copy_u8NumOfElements <= CHANNEL_NB) ){
-		Container         = Copy_u8ReturnAddress ;
-		ContainerElements = Copy_u8NumOfElements ;
+	if (grps[GlGroup].TriggerType == TRIGG_TYPE_SW){
+		/* Trigger Type 					*/
+		((Register*) LOCAL_ADCSRA ) -> ByteAccess  &= (LOCAL_TRIGG_TYPE_MASK) ;
+		((Register*) LOCAL_ADCSRA ) -> ByteAccess  |= (TRIGG_TYPE_SW)   ;
 	}
 	else {
-		Local_u8ErrorState = ERROR_NOK ;
+		/* Trigger Type 					*/
+		((Register*) LOCAL_ADCSRA ) -> ByteAccess  &= (LOCAL_TRIGG_TYPE_MASK) ;
+		((Register*) LOCAL_ADCSRA ) -> ByteAccess  |= (TRIGG_TYPE_HW)   ;
 	}
 
-	return Local_u8ErrorState ;
 }
 
 /*																					             */
 /*************************************************************************************************/
+
+
+
+
+/*************************************************************************************************/
+/* Description: Resets the Trigger Type to the Default state						             */
+
+static void HWReset(void){
+
+	if (grps[GlGroup].TriggerType == TRIGG_TYPE_SW){
+		/* Trigger Type 					*/
+		((Register*) LOCAL_ADCSRA ) -> ByteAccess  &= (LOCAL_TRIGG_TYPE_MASK) ;
+		((Register*) LOCAL_ADCSRA ) -> ByteAccess  |= (DEF_CHANNEL_TRIGGER)   ;
+	}
+
+}
+
+/*																					             */
+/*************************************************************************************************/
+
+
+
+
+
+
+/* Literally Junk Yard */
+static void nthng(void){
+		DIO_u8SetPinValue( 31 , 0 ) ;
+}
+
+
 
 
 

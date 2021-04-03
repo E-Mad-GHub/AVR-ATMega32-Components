@@ -38,12 +38,28 @@
 #define LOCAL_CONV_FLAG				0x10
 #define LOCAL_INTR_MASK				0xF7
 #define LOCAL_INTR_ENABLE			0x08
-
+#define LOCAL_TRIGG_TYPE_MASK		0xDF
 
 
 /*									        */
 /********************************************/
 
+
+
+
+/************ GROUPS Definition *************/
+/*									        */
+
+typedef struct {
+
+	u8 CH_Nb        ;
+	u8 TriggerType  ;
+	u8 * ArrOfChnls ;
+
+}GROUP;
+
+/*									        */
+/********************************************/
 
 
 #endif /* EXTINT_COMPONENT_EXTINT_PRIV_H_ */

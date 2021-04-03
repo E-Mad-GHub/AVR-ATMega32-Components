@@ -26,9 +26,12 @@
 #define ADC_PRESCALER			PRE_OVER_2
 #define ADC_ADJUSTMENT			ADJ_RIGHT
 
-#define ADC_CHANNEL				ADC_CH0
 
+#define ADC_DEF_CHANNEL			ADC_CH0
 
+#define DEF_CHANNEL_TRIGGER		TRIGG_TYPE_HW
+
+#define HW_TRIGGER_CONFIG		HW_TRIG_FREE_RUN
 
 
 
@@ -56,6 +59,52 @@ u8 Ch_Chosen[CHANNEL_NB] = {
 
 /*															*/
 /************************************************************/
+
+
+
+
+
+
+
+
+
+/* New Way	****************************************************************************/
+
+
+
+
+#define NB_OF_GROUPS			3
+
+GROUP grps[NB_OF_GROUPS] = {
+
+									/* Group 0	-> Group Index = 0						*/
+									{ 3 ,                /* Number of Channels in Group */
+									TRIGG_TYPE_HW ,		 /* Triggering Type for Group	*/
+									(u8  []){			 /* Channels Exist in the Group */
+											ADC_CH0,
+											ADC_CH2,
+											ADC_CH1
+											}
+									},
+
+									/* Group 1	-> Group Index = 1						*/
+					     			{ 3 ,                /* Number of Channels in Group */
+					     			TRIGG_TYPE_SW ,		 /* Triggering Type for Group	*/
+					     			(u8  []){			 /* Channels Exist in the Group */
+					     					ADC_CH3,
+											ADC_CH4,
+											ADC_CH5
+					     					}
+					     			},
+
+} ;
+
+/****************************************************************************************/
+
+
+
+
+
 
 
 

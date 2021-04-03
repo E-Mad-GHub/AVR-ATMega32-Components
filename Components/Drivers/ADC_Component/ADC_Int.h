@@ -65,6 +65,23 @@ typedef struct{
 #define ADC_CH6							0x06
 #define ADC_CH7							0x07
 
+/* Defining Trigger Types					*/
+#define TRIGG_TYPE_HW					0X20
+#define TRIGG_TYPE_SW					0X00
+
+/* Defining HW Trigger Types				*/
+#define   HW_TRIG_FREE_RUN				0x00
+#define   HW_TRIG_ANALOG_COMP           0x20
+#define   HW_TRIG_EXTI0                 0x40
+
+#define   HW_TRIG_T0_COMP_MATCH         0x60
+#define   HW_TRIG_T0_OVF                0x80
+
+#define   HW_TRIG_T1_COMP_MATCH         0xA0
+#define   HW_TRIG_T1_OVF                0xC0
+#define   HW_TRIG_T1_ICU                0xE0
+
+
 
 /*									        */
 /********************************************/
@@ -87,15 +104,90 @@ void ADC_vInit( void ) ;
 /*************************************************************************************************/
 
 
+
 /*************************************************************************************************/
-/* Description: Work the ADC with Blocking Mode		 								             */
+/* Description: Selects ADC Channel 												             */
 /*																				            	 */
-/* Inputs : void														 			             */
-/* 																								 */
+/* Inputs : Copy_u8Channel 					-> Selected Channel, EX. ADC_CH0		             */
+/* Outputs: u8Error 						-> Error State							             */
+/*																					             */
+
+void ADC_vSetChannel( u8 Copy_u8Channel );
+
+/*																					             */
+/*************************************************************************************************/
+
+
+
+/*************************************************************************************************/
+/* Description: Free Running Mode in ADC, just waits on conv. flag and writes the value of 		 */
+/* 				ADC conversion in the argument										             */
+/*																				            	 */
+/* Inputs : *Copy_u16Value 					-> Return value of ADC after Conv.		             */
+/* Outputs: u8Error 						-> Error State							             */
+/*																					             */
+
+void ADC_vFreeRun( u16 * Copy_u16Value );
+
+/*																					             */
+/*************************************************************************************************/
+
+
+/*************************************************************************************************/
+/* Description: Starts Conversion of ADC channel set before		 					             */
+/*																				            	 */
+/* Inputs : void 																		         */
+/* Outputs: u8Error 						-> Error State							             */
+/*																					             */
+
+void ADC_vStartConverting( void );
+
+/*																					             */
+/*************************************************************************************************/
+
+
+/*************************************************************************************************/
+/* Description: Fill Array with the values converted from ADC						             */
+/*																				            	 */
+/* Inputs : Copy_u16ValuePtr 				-> Pointer to Array							         */
+/* 			Copy_u8Length 					-> Array Length										 */
+/* Outputs: u8Error 						-> Error State							             */
+/*																					             */
+
+u8 ADC_vGetADC( u16 * Copy_u16ValuePtr , u8 Copy_u8Length);
+
+/*																					             */
+/*************************************************************************************************/
+
+
+
+
+/*************************************************************************************************/
+/* Description: Work the ADC with Blocking Mode	(SW Triggered) 						             */
+/*																				            	 */
+/* Inputs : Copy_ReturnValue 		-> Value of Conversion										 */
+/* 			Copy_ChosenChannel		-> Channel to work on	 									 */
+/*																								 */
 /* Outputs: void																	             */
 /*																					             */
 
-void ADC_GetBlocking( u16 * Copy_ReturnValue , u8 Copy_ChosenChannel )  ;
+void ADC_SWGetBlocking( u16 * Copy_ReturnValue , u8 Copy_ChosenChannel )  ;
+
+/*																					             */
+/*************************************************************************************************/
+
+
+
+/*************************************************************************************************/
+/* Description: Work the ADC with Blocking Mode	(HW Triggered) 						             */
+/*																				            	 */
+/* Inputs : Copy_ReturnValue 		-> Value of Conversion										 */
+/* 			Copy_ChosenChannel		-> Channel to work on	 									 */
+/*																								 */
+/* Outputs: void																	             */
+/*																					             */
+
+void ADC_HWGetBlocking( u16 * Copy_ReturnValue , u8 Copy_ChosenChannel )  ;
 
 /*																					             */
 /*************************************************************************************************/
@@ -116,14 +208,13 @@ u8 ADC_u8SetCallBack( void (*Copy_PvoidFuncCallBack)(void) ) ;
 
 
 /*************************************************************************************************/
-/* Description: ADC Refresh API														             */
+/* Description: ADC Refresh Group API												             */
 /*																				            	 */
-/* Inputs : Copy_u8ReturnAddress 			-> Address of the return Array Variable		         */
-/* 			Copy_u8NumOfElements            -> Array Number of elements							 */
+/* Inputs : Copy_u8GroupIndex 				-> Group Index .. Ex. 0 , 1 , 2 , 3 ... etc          */
 /* Outputs: u8Error 						-> Error State							             */
 /*																					             */
 
-u8 ADC_u8Refresh( CHANNELS * Copy_u8ReturnAddress , u8 Copy_u8NumOfElements);
+void ADC_u8Refresh( u8 Copy_u8GroupIndex );
 
 /*																					             */
 /*************************************************************************************************/
